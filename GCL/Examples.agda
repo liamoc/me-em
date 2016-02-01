@@ -87,15 +87,15 @@ mutex? = ag (now (T? _))
 sf? : ∀ m n → Property (SF n m)
 sf? = and′ (af (now (T? _))) (af (now (T? _)))
 
-abstract
-  petersons-search : Property (∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState)))
-  petersons-search
-   = (_,_ 25) ⟨$⟩
-       and′ mutex? (and′ sf? termination?)
-       (model petersons initialState) 25
 
-  petersons-proof : ∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState))
-  petersons-proof = Pr petersons-search
+petersons-search : Property (∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState)))
+petersons-search
+   = search 30 $
+       and′ mutex? (and′ sf? termination?)
+       (model petersons initialState)
+
+petersons-proof : ∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState))
+petersons-proof = Pr petersons-search
 
 
 petersons-correct : model petersons initialState ⊧ Mutex ∧′ SF ∧′ Termination
@@ -103,6 +103,7 @@ petersons-correct = di-⊧ (proj₂ petersons-proof)
 
 
 
+open import Data.Maybe
 
 dekkers₁ : GCL
 dekkers₁ =
