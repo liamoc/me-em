@@ -2,13 +2,14 @@ module GCL.Examples where
 
 open import Data.Nat
 open import Data.Bool hiding (_≟_)
-open import Data.Product
+open import Data.Product hiding (_×_)
 open import Relation.Binary.PropositionalEquality
 open import Function
 open import Data.List hiding (and; or)
 
 import Data.Stream as S
 
+open import Pair
 open import Properties
 open import Generators
 open import ModelChecker

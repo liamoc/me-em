@@ -1,6 +1,6 @@
 module ModelChecker where
 
-open import Data.Product hiding (map)
+open import Data.Product hiding (map; _×_)
 open import Data.Bool
 open import Coinduction
 open import Data.List as L hiding (all; any; and; or)
@@ -17,10 +17,12 @@ open import Category.Monad
 import Level
 open RawMonad (M.monad {Level.zero})
 open import Properties
+open import Pair
 
 open IsProp ⦃ ... ⦄
 
 record Diagram (L : Set)(Σ : Set) : Set₁ where
+  no-eta-equality
   constructor td
   field
       δ : L × Σ → List (L × Σ)
