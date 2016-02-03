@@ -1,0 +1,3 @@
+name: me-em
+depend: agda-stdlib
+include: .
