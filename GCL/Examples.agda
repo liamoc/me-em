@@ -2,13 +2,14 @@ module GCL.Examples where
 
 open import Data.Nat
 open import Data.Bool hiding (_≟_)
-open import Data.Product
+open import Data.Product hiding (_×_)
 open import Relation.Binary.PropositionalEquality
 open import Function
 open import Data.List hiding (and; or)
 
 import Data.Stream as S
 
+open import Pair
 open import Properties
 open import Generators
 open import ModelChecker
@@ -79,13 +80,22 @@ SF : Formula
 SF =  AF ⟨ T inCS₁ ⟩ ∧′ AF ⟨ T inCS₂ ⟩
 
 termination? : ∀ m n → Property (Termination n m)
-termination? = af (now (skip? _ and skip? _))
+termination? = af-now term? sound
+  where
+    term? : ⦃ ℓ : GCL × GCL ⦄ → Bool
+    term? ⦃ a , b ⦄ = ⌊ skip? a ⌋ ∧ ⌊ skip? b ⌋
+
+    sound : ⦃ ℓ : GCL × GCL ⦄ → T term? → _
+    sound ⦃ a , b ⦄ _ with skip? a | skip? b
+    sound ⦃ a , b ⦄ _  | yes p | yes q = p , q
+    sound ⦃ a , b ⦄ () | yes _ | no _
+    sound ⦃ a , b ⦄ () | no  _ | _
 
 mutex? : ∀ m n → Property (Mutex n m)
-mutex? = ag (now (T? _))
+mutex? = ag-now _ id
 
 sf? : ∀ m n → Property (SF n m)
-sf? = and′ (af (now (T? _))) (af (now (T? _)))
+sf? = and′ (af-now _ id) (af-now _ id)
 
 
 petersons-search : Property (∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState)))

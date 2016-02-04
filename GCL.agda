@@ -3,11 +3,12 @@ module GCL(Σ : Set) where
 open import Data.Nat
 open import Data.Bool hiding (_≟_)
 open import Data.List hiding (and)
-open import Data.Product hiding (map; Σ)
+open import Data.Product hiding (map; Σ; _×_)
 open import Function
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Unit using (tt)
 
+open import Pair
 open import Properties
 open import ModelChecker
 
