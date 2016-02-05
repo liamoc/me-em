@@ -16,9 +16,9 @@ open import Data.List.All hiding (all) renaming (map to map-all)
 open import Data.List as L hiding (any; all; and; or; map)
 open import Data.Maybe as M renaming (map to mapMaybe) hiding (Any ; All)
 open import Category.Monad
+open import Category.Applicative
+open import Category.Functor
 open import Level hiding (suc ; zero)
-open RawMonad (M.monad {Level.zero})
-open RawMonadPlus (M.monadPlus {Level.zero}) using (_∣_)
 
 
 open import Generators
@@ -72,8 +72,8 @@ Property' = Maybe
 
 record Property (P : Set) : Set where
   constructor prop
-  field decide : Bool
-  field proof : T decide → P
+  field found : Bool
+  field proof : T found → P
 
 fromDec : ∀{A : Set} → Dec A → Property A
 fromDec (yes p) = prop true  (const p)
@@ -137,6 +137,26 @@ alt : ∀{X} → Property X → Property X → Property X
 alt (prop true p) (prop b q) = prop true p
 alt (prop false p) (prop b q) = prop b q
 
+map : ∀ {P Q} → (P → Q) → Property P → Property Q
+map f (prop a p) = prop a (f ∘ p)
+
+bind : ∀{P Q} → Property P → (P → Property Q) → Property Q
+bind (prop true p) f = f (p tt )
+bind (prop false p) f = fail
+
+is-monad : RawMonad Property
+is-monad = record { return = prop true ∘ const ; _>>=_ = bind }
+
+is-monad-plus : RawMonadPlus Property
+is-monad-plus = record { monadZero = record { monad = is-monad ; ∅ = fail } ; _∣_ = alt } 
+
+open RawMonad is-monad
+
+is-applicative : RawApplicative Property
+is-applicative = record { pure = return ; _⊛_ = λ ab a → ab >>= λ ab′ → a >>= λ a′ → return (ab′ a′)  }
+
+is-functor : RawFunctor Property
+is-functor = record { _<$>_ = map }
 
 search : ∀ {X}{p : X → Set}{prop}
        → ℕ → ⦃ g : Gen X  ⦄
@@ -159,8 +179,6 @@ Pr :  ∀ {P} → (p : Property P) → Ty p
 Pr (prop true p) = p tt
 Pr (prop false p) = tt
 
-map : ∀ {P Q} → (P → Q) → Property P → Property Q
-map f (prop a p) = prop a (f ∘ p)
 
 
 any : ∀ {X : Set}{p : X → Set}{prop}
@@ -178,7 +196,5 @@ all : ∀ {X : Set}{p : X → Set}{prop}
     → (xs : List X)
     → ((x : X) → prop (p x))
     → Property (All p xs)
-all [] f = prop true (const []) -- just []
-all (x ∷ xs) f with conversion (f x)
-... | prop true p  = map (_∷_ (p tt)) (all xs f)
-... | prop false p = fail 
+all [] f = prop true (const [])
+all (x ∷ xs) f = conversion (f x) >>= λ p → map (p ∷_) (all xs f)

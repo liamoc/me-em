@@ -1,9 +1,8 @@
 module ModelChecker where
 
-open import Data.Product hiding (map; _×_)
 open import Data.Bool
 open import Coinduction
-open import Data.List as L hiding (all; any; and; or)
+open import Data.List as L hiding (all; any; and; or; map)
 open import Data.List.All as All hiding (map; all)
 open import Data.List.Any as Any hiding (map; any)
 open import Data.Nat
@@ -14,10 +13,9 @@ open import Function hiding (_⟨_⟩_)
 
 open import Data.Maybe as M hiding (map; All; Any)
 open import Category.Monad
-import Level
-open RawMonad (M.monad {Level.zero})
 open import Properties
-open import Pair
+open RawMonad (Properties.is-monad)
+open import Pair hiding (map)
 
 open IsProp ⦃ ... ⦄
 
@@ -33,9 +31,8 @@ _∥_ : ∀{L₁ L₂ : Set}{Σ}
     → Diagram (L₁ × L₂) Σ
 (td δ₁ i₁) ∥ (td δ₂ i₂) = td δ (i₁ , i₂)
   where
-    δ = (λ { ((ℓ₁ , ℓ₂) , σ) →
-       map (λ { (ℓ₁′ , σ′) → (ℓ₁′ , ℓ₂ ) , σ′ }) (δ₁ (ℓ₁ , σ)) ++
-       map (λ { (ℓ₂′ , σ′) → (ℓ₁  , ℓ₂′) , σ′ }) (δ₂ (ℓ₂ , σ)) })
+    δ = λ { ((ℓ₁ , ℓ₂) , σ) → L.map (Pair.map (_, ℓ₂) id) (δ₁ (ℓ₁ , σ))
+                           ++ L.map (Pair.map (ℓ₁ ,_) id) (δ₂ (ℓ₂ , σ))  }
 
 module CTL(L Σ : Set) where
 
@@ -146,39 +143,39 @@ module CTL(L Σ : Set) where
   di-⊧ : ∀{n}{φ}{m} → ⦃ p : Depth-Invariant φ ⦄ → φ n m → m ⊧ φ
   di-⊧ {n}{φ} ⦃ d ⦄ p = models n (λ q → di-≤ φ d p q)
 
-
   a-u : ∀{φ ψ : Formula}
       → ( (m : CT)(n : ℕ) → Property (φ n m) )
       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
       → (m : CT)(n : ℕ)
       → Property (A[ φ U ψ ] n m)
-  a-u _ _ _ zero = nothing
+  a-u _ _ _ zero = fail
   a-u p₁ p₂ (At σ ms) (suc n) with p₂ (At σ ms) n
-  ... | just p  = just (here p)
-  ... | nothing = p₁ (At σ ms) n
-              >>= λ p → there p ⟨$⟩ all (♭ ms) (λ m → a-u p₁ p₂ m n)
+  ... | prop true v = prop true (const (here (v tt)))
+  ... | prop false v = p₁ (At σ ms) n >>= λ x → map (there x) (all (♭ ms) λ m → a-u p₁ p₂ m n)
 
   af : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
      → (m : CT)(n : ℕ)
      → Property (AF φ n m)
-  af p m n = a-u (λ _ _ → just tt) p m n
+  af p m n = a-u (λ _ _ → return tt) p m n
+
+
+
 
 
   and′ : ∀ {φ ψ  : Formula}
-     → ( (m : CT)(n : ℕ) → Property (φ n m) )
-     → ( (m : CT)(n : ℕ) → Property (ψ n m) )
-     → (m : CT)(n : ℕ)
-     → Property ((φ ∧′ ψ) n m)
+       → ( (m : CT)(n : ℕ) → Property (φ n m) )
+       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
+       → (m : CT)(n : ℕ)
+       → Property ((φ ∧′ ψ) n m)
   and′ a b m n = pure _,_ ⊛ a m n ⊛ b m n
 
-
   completed? : ∀ m n → Property (Completed n m)
-  completed? (At σ ms) _ = completed ⟨$⟩ empty? (♭ ms)
+  completed? (At σ ms) _ = completed <$> empty? (♭ ms)
     where
       empty? : ∀{X}(n : List X) → Property (n ≡ [])
-      empty? []      = just refl
-      empty? (_ ∷ _) = nothing
+      empty? []      = return refl
+      empty? (_ ∷ _) = fail
 
   ag : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
@@ -186,23 +183,21 @@ module CTL(L Σ : Set) where
      → Property (AG φ n m)
   ag p = a-u p (and′ p completed?)
 
-
   e-u : ∀{φ ψ : Formula}
       → ( (m : CT)(n : ℕ) → Property (φ n m) )
       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
       → (m : CT)(n : ℕ)
       → Property (E[ φ U ψ ] n m)
-  e-u _ _ _ zero = nothing
+  e-u _ _ _ zero = fail
   e-u p₁ p₂ (At σ ms) (suc n) with p₂ (At σ ms) n
-  ... | just p  = just (here p)
-  ... | nothing = p₁ (At σ ms) n
-              >>= λ p → there p ⟨$⟩ any (♭ ms) (λ m → e-u p₁ p₂ m n)
+  ... | prop true v = prop true (const (here (v tt)))
+  ... | prop false v = p₁ (At σ ms) n >>= λ x → map (there x) (any (♭ ms) λ m → e-u p₁ p₂ m n)
 
   ef : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
      → (m : CT)(n : ℕ)
      → Property (EF φ n m)
-  ef p m n = e-u (λ _ _ → just tt) p m n
+  ef p m n = e-u (λ _ _ → return tt) p m n
 
   eg : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
@@ -210,13 +205,18 @@ module CTL(L Σ : Set) where
      → Property (EG φ n m)
   eg p = e-u p (and′ p completed?)
 
-
   now : ∀{ p : ⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → Set }{prop}
       → ⦃ pr : IsProp prop ⦄
       → (⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → prop (p ⦃ σ ⦄ ⦃ ℓ ⦄) )
       → (m : CT)(n : ℕ)
       → Property (⟨ p ⟩ n m)
-  now p₁ (At (ℓ , σ) ms) _ = here ⟨$⟩ conversion (p₁ ⦃ σ ⦄ ⦃ ℓ ⦄)
+  now p₁ (At (ℓ , σ) ms) _ = here <$> conversion (p₁ ⦃ σ ⦄ ⦃ ℓ ⦄)
+{- 
+
+
+
+
+
 
   -- Test first, prove later!
 
@@ -281,3 +281,5 @@ module CTL(L Σ : Set) where
 
 
 
+
+-}

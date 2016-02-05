@@ -3,11 +3,12 @@ module ModelChecker.Examples where
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Unit hiding (_≟_)
 open import Data.Nat
-open import Data.Product
 open import Data.List
 
 open import ModelChecker
 open import Properties
+
+open import Pair
 
 HiHorse : Diagram ⊤ ℕ
 LoRoad  : Diagram ⊤ ℕ

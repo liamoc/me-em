@@ -9,3 +9,6 @@ record _×_ (A B : Set) : Set where
         snd : B
 
 open _×_ public
+
+map : ∀{A B C D} → (A → B) → (C → D) → (A × C → B × D)
+map f g (a , b) = f a , g b

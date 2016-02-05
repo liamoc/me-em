@@ -2,14 +2,13 @@ module GCL(Σ : Set) where
 
 open import Data.Nat
 open import Data.Bool hiding (_≟_)
-open import Data.List hiding (and)
-open import Data.Product hiding (map; Σ; _×_)
+open import Data.List as L hiding (and; map)
 open import Function
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Unit using (tt)
 
-open import Pair
-open import Properties
+open import Pair hiding (map)
+open import Properties hiding (map)
 open import ModelChecker
 
 data Guard : Set
@@ -31,10 +30,10 @@ ops : (GCL × Σ) → List (GCL × Σ)
 ops (skip     , σ) = []
 ops (update u , σ) = [ skip , u σ ]
 ops (skip · y , σ) = [ y , σ ]
-ops (x · y    , σ) = map (λ { (x , σ) → (x · y) , σ}) $ ops (x , σ)
-ops (if xs fi , σ) = map (λ { (g ⟶ x) → x , σ }) $
+ops (x · y    , σ) = L.map (λ { (x , σ) → (x · y) , σ}) $ ops (x , σ)
+ops (if xs fi , σ) = L.map (λ { (g ⟶ x) → x , σ }) $
                      filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs
-ops (do xs od , σ) with map (λ { (g ⟶ x) → (x · do xs od) , σ}) (filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs)
+ops (do xs od , σ) with L.map (λ { (g ⟶ x) → (x · do xs od) , σ}) (filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs)
 ... | [] = [ skip , σ ]
 ... | ys = ys
 

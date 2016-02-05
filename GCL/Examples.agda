@@ -80,7 +80,7 @@ SF : Formula
 SF =  AF ⟨ T inCS₁ ⟩ ∧′ AF ⟨ T inCS₂ ⟩
 
 termination? : ∀ m n → Property (Termination n m)
-termination? = af-now term? sound
+termination? = af (now (prop term? sound)) 
   where
     term? : ⦃ ℓ : GCL × GCL ⦄ → Bool
     term? ⦃ a , b ⦄ = ⌊ skip? a ⌋ ∧ ⌊ skip? b ⌋
@@ -92,10 +92,10 @@ termination? = af-now term? sound
     sound ⦃ a , b ⦄ () | no  _ | _
 
 mutex? : ∀ m n → Property (Mutex n m)
-mutex? = ag-now _ id
+mutex? = ag (now (T? _))
 
 sf? : ∀ m n → Property (SF n m)
-sf? = and′ (af-now _ id) (af-now _ id)
+sf? = and′ (af (now (T? _))) (af (now (T? _)))
 
 
 petersons-search : Property (∃ (λ d → (Mutex ∧′ SF ∧′ Termination ) d (model petersons initialState)))
