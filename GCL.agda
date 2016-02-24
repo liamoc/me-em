@@ -8,7 +8,7 @@ open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Unit using (tt)
 
 open import Pair hiding (map)
-open import Properties hiding (map)
+open import Properties 
 open import ModelChecker
 
 data Guard : Set

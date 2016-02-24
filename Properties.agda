@@ -19,56 +19,15 @@ open import Category.Monad
 open import Category.Applicative
 open import Category.Functor
 open import Level hiding (suc ; zero)
+import Data.Vec as V
+import Data.Stream as S
 
 
 open import Generators
 
-{- 
--- Relation.Nullary
-data Dec (P : Set) : Set where
-  yes :   P → Dec P
-  no  : ¬ P → Dec P
-
--- Relation.Nullary.Product
-_×-dec_ : ∀{P Q} → Dec P → Dec Q → Dec (P × Q)
-
--- Relation.Nullary.Sum
-_⊎-dec_  : ∀{P Q} → Dec P → Dec Q → Dec (P ⊎ Q)
-
--- Relation.Nullary.Negation
-¬? : ∀{P} → Dec P → Dec (¬ P)
-
--- Relation.Nullary.Implication
-_→-dec_ : ∀{P Q} → Dec P → Dec Q → Dec (P → Q)
-
-
--- Data.Nat
-_≟_ : (m : ℕ) → (n : ℕ) → Dec (m ≡ n)
-zero  ≟ zero   = yes refl
-suc m ≟ suc n  with m ≟ n
-... | yes p    = yes (cong suc p)
-... | no prf   = no (prf ∘ cong pred)
-zero  ≟ suc n  = no λ()
-suc m ≟ zero   = no λ()
-
--- Data.Nat
-_≤?_ : (m : ℕ) → (n : ℕ) → Dec (m ≤ n)
-zero  ≤? _     = yes z≤n
-suc m ≤? zero  = no λ()
-suc m ≤? suc n with m ≤? n
-...            | yes m≤n = yes (s≤s m≤n)
-...            | no  m≰n = no  (m≰n ∘ ≤-pred)
-  where ≤-pred : ∀ {m n} → suc m ≤ suc n → m ≤ n
-        ≤-pred (s≤s m≤n) = m≤n
-
--}
-
 T? : (b : Bool) → Dec (T b)
 T? true = yes tt
 T? false = no id
-
-
-Property' = Maybe
 
 record Property (P : Set) : Set where
   constructor prop
@@ -90,86 +49,86 @@ instance
   DecIsProp = record { conversion = fromDec }
 
 open IsProp ⦃ ... ⦄
-open import Function.Equivalence using (Equivalence)
-open import Function.Equality using (_⟨$⟩_)
+
+module Lemmas where
+  open import Function.Equivalence using (Equivalence)
+  open import Function.Equality using (_⟨$⟩_)
+
+  ∧-T : ∀{a b} → T (a ∧ b) → T a × T b
+  ∧-T = _⟨$⟩_ (Equivalence.to T-∧)
+
+  ∨-T : ∀{a b} → T (a ∨ b) → T a ⊎ T b
+  ∨-T = _⟨$⟩_ (Equivalence.to T-∨)
 
 
-∧-T : ∀{a b} → T (a ∧ b) → T a × T b
-∧-T = _⟨$⟩_ (Equivalence.to T-∧)
-
-∨-T : ∀{a b} → T (a ∨ b) → T a ⊎ T b
-∨-T = _⟨$⟩_ (Equivalence.to T-∨)
 
 
-_and_ : ∀{A B}{prop₁ prop₂}
-      → ⦃ P₁ : IsProp prop₁ ⦄ → prop₁ A
-      → ⦃ P₂ : IsProp prop₂ ⦄ → prop₂ B
-      → Property (A × B)
-a and b with conversion a | conversion b
-... | prop a′ p | prop b′ q
-    = prop (a′ ∧ b′) (Prod.map p q ∘ ∧-T)
-
-_or_ : ∀{A B}{prop₁ prop₂}
-     → ⦃ P₁ : IsProp prop₁ ⦄ → prop₁ A
-     → ⦃ P₂ : IsProp prop₂ ⦄ → prop₂ B
-     → Property (A ⊎ B)
-a or b with conversion a | conversion b
-... | prop a′ p | prop b′ q
-    = prop (a′ ∨ b′) (Sum.map p q ∘ ∨-T)
-
-_implies_ : ∀{A B : Set}{prop}
-          → Dec A
-          → ⦃ P₁ : IsProp prop ⦄ → prop B
-          → Property (A → B)
-no ¬p implies b = prop true (λ _ p → ⊥-elim (¬p p))
-yes p implies b with conversion b
-... | prop b′ q = prop b′ (λ p _ → q p)
-
-infixl 60 _and_
-import Data.Vec as V
-import Data.Stream as S
 
 
-fail : ∀{X} → Property X
-fail = prop false ⊥-elim
-
-alt : ∀{X} → Property X → Property X → Property X
-alt (prop true p) (prop b q) = prop true p
-alt (prop false p) (prop b q) = prop b q
-
-map : ∀ {P Q} → (P → Q) → Property P → Property Q
-map f (prop a p) = prop a (f ∘ p)
-
-bind : ∀{P Q} → Property P → (P → Property Q) → Property Q
-bind (prop true p) f = f (p tt )
-bind (prop false p) f = fail
 
 is-monad : RawMonad Property
-is-monad = record { return = prop true ∘ const ; _>>=_ = bind }
+is-monad = record { return = return ; _>>=_ = bind }
+  where
+    return : ∀{P} → P → Property P
+    return = prop true ∘ const
+
+    bind : ∀{P Q} → Property P → (P → Property Q) → Property Q
+    bind (prop true p) f = f (p tt )
+    bind (prop false p) f = prop false ⊥-elim
 
 is-monad-plus : RawMonadPlus Property
 is-monad-plus = record { monadZero = record { monad = is-monad ; ∅ = fail } ; _∣_ = alt } 
+  where
+    fail : ∀{X} → Property X
+    fail = prop false ⊥-elim
 
-open RawMonad is-monad
+    alt : ∀{X} → Property X → Property X → Property X
+    alt (prop x p) (prop y q) = prop (x ∨ y) ([ p , q ]′ ∘ Lemmas.∨-T)
+
+open RawMonadPlus is-monad-plus
 
 is-applicative : RawApplicative Property
-is-applicative = record { pure = return ; _⊛_ = λ ab a → ab >>= λ ab′ → a >>= λ a′ → return (ab′ a′)  }
+is-applicative = record { pure = return ; _⊛_ = app }
+  where
+    app : ∀{A B} → Property (A → B) → Property A → Property B
+    app (prop x f) (prop y a)  = prop (x ∧ y) (uncurry _$_ ∘ Prod.map f a ∘ Lemmas.∧-T)
 
 is-functor : RawFunctor Property
 is-functor = record { _<$>_ = map }
+  where map : ∀ {P Q} → (P → Q) → Property P → Property Q
+        map f (prop a p) = prop a (f ∘ p)
 
 search : ∀ {X}{p : X → Set}{prop}
        → ℕ → ⦃ g : Gen X  ⦄
        → ⦃ P : IsProp prop ⦄
        → ((x : X) → prop (p x))
        → Property (∃ p)
-search n ⦃ s ⦄ f = V.foldr _ alt fail
+search n ⦃ s ⦄ f = V.foldr _ _∣_ ∅
                      (V.map (quantify ∘ conversion ∘ f) (S.take n s))
   where
     quantify : ∀ {X}{p : X → Set}{i}
         → Property (p i) → Property (∃ p)
     quantify (prop a p) = prop a (λ x → _ , p x)
 
+infixl 60 _and_
+_and_ : ∀{A B}{prop₁ prop₂}
+      → ⦃ P₁ : IsProp prop₁ ⦄ → prop₁ A
+      → ⦃ P₂ : IsProp prop₂ ⦄ → prop₂ B
+      → Property (A × B)
+a and b = _,_ <$> conversion a ⊛ conversion b
+
+_or_ : ∀{A B}{prop₁ prop₂}
+     → ⦃ P₁ : IsProp prop₁ ⦄ → prop₁ A
+     → ⦃ P₂ : IsProp prop₂ ⦄ → prop₂ B
+     → Property (A ⊎ B)
+a or b = inj₁ <$> conversion a ∣ inj₂ <$> conversion b
+
+_implies_ : ∀{A B : Set}{prop}
+          → Dec A
+          → ⦃ P₁ : IsProp prop ⦄ → prop B
+          → Property (A → B)
+no ¬p implies b = return (⊥-elim ∘ ¬p)
+yes p implies b = const <$> conversion b
 
 Ty : ∀ {P} → Property P → Set
 Ty {P} (prop true p) = P
@@ -180,21 +139,18 @@ Pr (prop true p) = p tt
 Pr (prop false p) = tt
 
 
-
 any : ∀ {X : Set}{p : X → Set}{prop}
     → ⦃ P : IsProp prop ⦄
     → (xs : List X)
     → ((x : X) → prop (p x))
     → Property (Any p xs)
-any [] f = fail -- nothing
-any (x ∷ xs) f with conversion (f x)
-... | prop true p = prop true (here ∘ p)
-... | prop false p = map there (any xs f)
+any [] f = ∅
+any (x ∷ xs) f = here <$> conversion (f x) ∣ there <$> any xs f
 
 all : ∀ {X : Set}{p : X → Set}{prop}
     → ⦃ P : IsProp prop ⦄
     → (xs : List X)
     → ((x : X) → prop (p x))
     → Property (All p xs)
-all [] f = prop true (const [])
-all (x ∷ xs) f = conversion (f x) >>= λ p → map (p ∷_) (all xs f)
+all [] f = return []
+all (x ∷ xs) f = _∷_ <$> conversion (f x) ⊛ all xs f

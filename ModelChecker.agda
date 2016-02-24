@@ -14,7 +14,7 @@ open import Function hiding (_⟨_⟩_)
 open import Data.Maybe as M hiding (map; All; Any)
 open import Category.Monad
 open import Properties
-open RawMonad (Properties.is-monad)
+open RawMonadPlus (Properties.is-monad-plus)
 open import Pair hiding (map)
 
 open IsProp ⦃ ... ⦄
@@ -148,10 +148,10 @@ module CTL(L Σ : Set) where
       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
       → (m : CT)(n : ℕ)
       → Property (A[ φ U ψ ] n m)
-  a-u _ _ _ zero = fail
-  a-u p₁ p₂ (At σ ms) (suc n) with p₂ (At σ ms) n
-  ... | prop true v = prop true (const (here (v tt)))
-  ... | prop false v = p₁ (At σ ms) n >>= λ x → map (there x) (all (♭ ms) λ m → a-u p₁ p₂ m n)
+  a-u _ _ _ zero = ∅
+  a-u p₁ p₂ (At σ ms) (suc n) = here <$> p₂ (At σ ms) n
+                              ∣ there <$> p₁ (At σ ms) n ⊛ all (♭ ms) (λ m → a-u p₁ p₂ m n)
+
 
   af : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
@@ -168,14 +168,14 @@ module CTL(L Σ : Set) where
        → ( (m : CT)(n : ℕ) → Property (ψ n m) )
        → (m : CT)(n : ℕ)
        → Property ((φ ∧′ ψ) n m)
-  and′ a b m n = pure _,_ ⊛ a m n ⊛ b m n
+  and′ a b m n = _,_ <$> a m n ⊛ b m n
 
   completed? : ∀ m n → Property (Completed n m)
   completed? (At σ ms) _ = completed <$> empty? (♭ ms)
     where
       empty? : ∀{X}(n : List X) → Property (n ≡ [])
       empty? []      = return refl
-      empty? (_ ∷ _) = fail
+      empty? (_ ∷ _) = ∅
 
   ag : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
@@ -188,10 +188,9 @@ module CTL(L Σ : Set) where
       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
       → (m : CT)(n : ℕ)
       → Property (E[ φ U ψ ] n m)
-  e-u _ _ _ zero = fail
-  e-u p₁ p₂ (At σ ms) (suc n) with p₂ (At σ ms) n
-  ... | prop true v = prop true (const (here (v tt)))
-  ... | prop false v = p₁ (At σ ms) n >>= λ x → map (there x) (any (♭ ms) λ m → e-u p₁ p₂ m n)
+  e-u _ _ _ zero = ∅
+  e-u p₁ p₂ (At σ ms) (suc n) = here <$> p₂ (At σ ms) n
+                              ∣ there <$> p₁ (At σ ms) n ⊛ any (♭ ms) (λ m → e-u p₁ p₂ m n)
 
   ef : ∀{φ : Formula}
      → ( (m : CT)(n : ℕ) → Property (φ n m) )
@@ -211,75 +210,3 @@ module CTL(L Σ : Set) where
       → (m : CT)(n : ℕ)
       → Property (⟨ p ⟩ n m)
   now p₁ (At (ℓ , σ) ms) _ = here <$> conversion (p₁ ⦃ σ ⦄ ⦃ ℓ ⦄)
-{- 
-
-
-
-
-
-
-  -- Test first, prove later!
-
-  -- In library somewhere?
-  all-bool : ∀ {a} {A : Set a} → (A → Bool) → List A → Bool
-  all-bool p []       = true
-  all-bool p (x ∷ xs) = p x ∧ all-bool p xs
-
-  ag-test : (Σ → L → Bool) → CT → ℕ → Bool
-  ag-test p m zero = false
-  ag-test p (At (ℓ , σ) ms) (suc n) = p σ ℓ ∧ all-bool (λ m → ag-test p m n) (♭ ms)
-
-  af-test : (Σ → L → Bool) → CT → ℕ → Bool
-  af-test p m zero = false
-  af-test p (At (ℓ , σ) ms) (suc n) = p σ ℓ ∨ all-bool (λ m → af-test p m n) (♭ ms)
-
-  -- Should maybe use T-∧ and T-∨ from Data.Bool.Properties...
-
-  ∧-elim₁ : ∀ {a b} → T (a ∧ b) → T a
-  ∧-elim₁ {true} _ = _
-  ∧-elim₁ {false} ()
-
-  ∧-elim₂ : ∀ a {b} → T (a ∧ b) → T b
-  ∧-elim₂ true p = p
-  ∧-elim₂ false ()
-
-  ∨-elim₂ : ∀ {a b} → ¬ T a → T (a ∨ b) → T b
-  ∨-elim₂ {true } na ab = ⊥-elim (na _)
-  ∨-elim₂ {false} na ab = ab
-
-  all-proof : ∀ {a b} {A : Set a} {B : A → Set b} (p : A → Bool) (sound : ∀ {x} → T (p x) → B x) →
-                (xs : List A) → T (all-bool p xs) → All B xs
-  all-proof p sound [] ok = []
-  all-proof p sound (x ∷ xs) ok = sound (∧-elim₁ ok) ∷ all-proof p sound xs (∧-elim₂ (p x) ok)
-
-  module _ {D : ⦃ σ : Σ ⦄ ⦃ ℓ : L ⦄ → Set}
-           (p : ⦃ σ : Σ ⦄ ⦃ ℓ : L ⦄ → Bool)
-           (sound : ⦃ σ : Σ ⦄ ⦃ ℓ : L ⦄ → T p → D) where
-
-    ag-proof : ∀ m n → T (ag-test (λ σ ℓ → p) m n) → AG ⟨ D ⟩ n m
-    ag-proof m zero ()
-    ag-proof (At (ℓ , σ) ms) (suc n) ok with completed? (At (ℓ , σ) ms) n
-    ... | just cmp = here (here (sound (∧-elim₁ ok)) , cmp)
-    ... | nothing  = there (here (sound (∧-elim₁ ok)))
-                           (all-proof _ (λ {m} → ag-proof m n) (♭ ms) (∧-elim₂ p ok))
-
-    ag-now : (m : CT) (n : ℕ) → Property (AG ⟨ D ⟩ n m)
-    ag-now m n with T? (ag-test (λ σ ℓ → p) m n)
-    ... | yes ok = just (ag-proof m n ok)
-    ... | no _   = nothing
-
-    af-proof : ∀ m n → T (af-test (λ σ ℓ → p) m n) → AF ⟨ D ⟩ n m
-    af-proof m zero ()
-    af-proof (At (ℓ , σ) ms) (suc n) ok with T? p
-    ... | yes yp = here (here (sound yp))
-    ... | no  np = there tt (all-proof _ (λ {m} → af-proof m n) (♭ ms) (∨-elim₂ np ok))
-
-    af-now : ∀ (m : CT) (n : ℕ) → Property (AF ⟨ D ⟩ n m)
-    af-now m n with T? (af-test (λ σ ℓ → p) m n)
-    ... | yes ok = just (af-proof m n ok)
-    ... | no _   = nothing
-
-
-
-
--}
