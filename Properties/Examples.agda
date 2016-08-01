@@ -1,7 +1,12 @@
 module Properties.Examples where
 
+open import Generators
+open import HDec
 open import Properties
 
+open import Data.Empty
+open import Relation.Nullary
+open import Relation.Nullary.Negation
 open import Data.Nat
 open import Data.Nat.GCD
 open import Function
@@ -14,9 +19,8 @@ i ² = i * i
 infixr 12 _²
 
 triad : Property _
-triad = search 5000 $ λ { (x , y , z)
-         → ¬? (x ≟ 0) and ¬? (y ≟ 0)
-       and ((x ² + y ²) ≟ (z ²)) }
+triad = exists $ λ { (x , y , z)
+         → ¬? (x ≟ 0) and ¬? (y ≟ 0) and ¬? ((x ² + y ²) ≟ z ²) }
 
 gcd? : ∀ l m n → Dec (GCD l m n)
 gcd? l m n with gcd l m
@@ -25,7 +29,7 @@ gcd? l m n with gcd l m
 ... | yes r = yes (subst (GCD l m) r p)
 
 ex₃ : Property (∃ (λ i → ¬ GCD (i ² + 7) ((i + 1)² + 7) 1))
-ex₃ = search 60 $ λ i →
+ex₃ = exists $ λ i →
        ¬? (gcd? (i ² + 7) ((i + 1)² + 7) 1)
 
 TyD : ∀{P} → Dec P → Set
@@ -42,4 +46,4 @@ ex₂ : GCD 6 35 1
 ex₂ = PrD (gcd? 6 35 1)
 
 lemma : ∃ (λ i → ¬ GCD (i ² + 7) ((i + 1)² + 7) 1)
-lemma = Pr ex₃
+lemma = check 60 ex₃

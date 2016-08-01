@@ -1,212 +1,173 @@
 module ModelChecker where
 
-open import Data.Bool
-open import Coinduction
-open import Data.List as L hiding (all; any; and; or; map)
+open import Data.Product hiding (map)
+open import Data.List hiding (all ; any)
 open import Data.List.All as All hiding (map; all)
 open import Data.List.Any as Any hiding (map; any)
+open import Coinduction
 open import Data.Nat
-open import Relation.Binary.PropositionalEquality hiding ([_])
-open import Data.Unit hiding (_≟_)
-open import Data.Empty
-open import Function hiding (_⟨_⟩_)
+open import Function
+open import Relation.Binary.PropositionalEquality
 
-open import Data.Maybe as M hiding (map; All; Any)
-open import Category.Monad
-open import Properties
-open RawMonadPlus (Properties.is-monad-plus)
-open import Pair hiding (map)
+open import HDec
 
-open IsProp ⦃ ... ⦄
 
 record Diagram (L : Set)(Σ : Set) : Set₁ where
   no-eta-equality
   constructor td
-  field
-      δ : L × Σ → List (L × Σ)
-      I : L
+  field  δ : L × Σ → List (L × Σ)
+         I : L
 
-_∥_ : ∀{L₁ L₂ : Set}{Σ}
-    → Diagram L₁ Σ → Diagram L₂ Σ
-    → Diagram (L₁ × L₂) Σ
+_∥_ : ∀{L₁ L₂}{Σ} → Diagram L₁ Σ → Diagram L₂ Σ → Diagram (L₁ × L₂) Σ
 (td δ₁ i₁) ∥ (td δ₂ i₂) = td δ (i₁ , i₂)
   where
-    δ = λ { ((ℓ₁ , ℓ₂) , σ) → L.map (Pair.map (_, ℓ₂) id) (δ₁ (ℓ₁ , σ))
-                           ++ L.map (Pair.map (ℓ₁ ,_) id) (δ₂ (ℓ₂ , σ))  }
+    δ = (λ { ((ℓ₁ , ℓ₂) , σ) →
+      map (λ { (ℓ₁′ , σ′) → (ℓ₁′ , ℓ₂ ) , σ′ }) (δ₁ (ℓ₁ , σ)) ++
+      map (λ { (ℓ₂′ , σ′) → (ℓ₁  , ℓ₂′) , σ′ }) (δ₂ (ℓ₂ , σ)) })
 
 module CTL(L Σ : Set) where
 
-  data CT : Set where
-    At : (L × Σ) → ∞ (List CT) → CT
+ data CT : Set where
+   At : (L × Σ) → ∞ (List CT) → CT
 
-  follow    : (δ : (L × Σ) → List (L × Σ)) → (L × Σ) → CT
-  followAll : (δ : (L × Σ) → List (L × Σ)) → List (L × Σ) → List CT
-  follow    δ σ        = At σ (♯ followAll δ (δ σ))
-  followAll δ (σ ∷ σs) = follow δ σ ∷ followAll δ σs
-  followAll δ []       = []
+ model : Diagram L Σ → Σ → CT
+ model (td δ I) σ = follow (I , σ)
+   where
+    follow    : (L × Σ) → CT
+    followAll : List (L × Σ) → List CT
+    follow    σ         = At σ (♯ followAll (δ σ))
+    followAll (σ ∷ σs)  = follow σ ∷ followAll σs
+    followAll []        = []
 
-  model : Diagram L Σ → Σ → CT
-  model (td δ I) σ = follow δ (I , σ)
+ Formula = (depth : ℕ) → (tree : CT) → Set
 
-  Formula = (ℕ → CT → Set)
+ data _⊧_ (m : CT)(φ : Formula) : Set where
+   satisfies : ∀ d₀ → (∀ { d } → d₀ ≤′ d → φ d m) → m ⊧ φ
 
-  data _⊧_ (m : CT)(φ : Formula) : Set where
-    models : ∀ d₀ → (∀ { d } → d₀ ≤′ d → φ d m) → m ⊧ φ
+ record DepthInv (φ : Formula) : Set where
+   constructor di
+   field proof : (∀{n}{m} → φ n m → φ (suc n) m)
 
-  Depth-Invariant : (φ : Formula) → Set
-  Depth-Invariant φ = (∀{n}{m} → φ n m → φ (suc n) m)
+ di-⊧ : ∀{n}{φ}{m} ⦃ d : DepthInv φ ⦄ → φ n m → m ⊧ φ
+ di-⊧ {n}{φ}{m} ⦃ di d ⦄ p = satisfies n (λ q → di-≤ p q)
+   where
+     di-≤ : ∀{n n′} → φ n m → n ≤′ n′ → φ n′ m
+     di-≤ p ≤′-refl      = p
+     di-≤ p (≤′-step l)  = d (di-≤ p l)
 
-  data A[_U_] (φ ψ : Formula) : Formula where
-    here  : ∀{t}{n} → ψ n t → A[ φ U ψ ] (suc n) t
-    there : ∀{σ}{ms}{n}
-          → φ n (At σ ms)
-          → All (A[ φ U ψ ] n) (♭ ms)
-          → A[ φ U ψ ] (suc n) (At σ ms)
+ data True : Formula where
+   tt : ∀{n}{m} → True n m
+ instance
+   True-di : DepthInv True
+   True-di = di (const tt)
 
-  data Completed : Formula where
-    completed : ∀{σ}{n}{ms}
-              → ♭ ms ≡ []
-              → Completed n (At σ ms)
+ data ⟨_⟩ (g : ⦃ σ : Σ ⦄ ⦃ ℓ : L ⦄ → Set) : Formula where
+   here : ∀{σ}{ℓ}{ms}{d} → g ⦃ σ ⦄ ⦃ ℓ ⦄ → ⟨ g ⟩ d (At (ℓ , σ) ms)
 
-  data _∧′_ (φ ψ : Formula ) : Formula where
+ instance
+   ⟨⟩-di : ∀{p : ⦃ σ : Σ ⦄ ⦃ ℓ : L ⦄ → Set} → DepthInv ⟨ p ⟩
+   ⟨⟩-di {p} = di proof
+     where
+       proof : ∀{n}{m} → ⟨ p ⟩ n m → ⟨ p ⟩ (suc n) m
+       proof (here x) = here x
+
+ infixr 21 _∧′_
+
+ data _∧′_ (φ ψ : Formula ) : Formula where
     _,_ : ∀{n}{m} → φ n m → ψ n m → (φ ∧′ ψ) n m
 
-  infixr 100 _∧′_
-  data True : Formula where
-    tt : ∀{n}{m} → True n m
-  data False : Formula where
+ instance
+   ∧′-di : ∀{φ ψ} ⦃ p : DepthInv φ ⦄ ⦃ q : DepthInv ψ ⦄ → DepthInv (φ ∧′ ψ)
+   ∧′-di ⦃ di p ⦄ ⦃ di q ⦄ = di λ { (a , b) → p a , q b }
 
+ data A[_U_] (φ ψ : Formula) : Formula where
+   here  : ∀{t}{n} → ψ n t → A[ φ U ψ ] (suc n) t
+   there : ∀{σ}{ms}{n}
+     → φ n (At σ ms)
+     → All (A[ φ U ψ ] n) (♭ ms)
+     → A[ φ U ψ ] (suc n) (At σ ms)
 
-  instance
-    Completed-di : Depth-Invariant Completed
-    Completed-di (completed x) = completed x
+ instance
+   A-di : ∀{φ ψ} ⦃ p : DepthInv φ ⦄ ⦃ q : DepthInv ψ ⦄ → DepthInv A[ φ U ψ ]
+   A-di {φ}{ψ} ⦃ di p ⦄ ⦃ di q ⦄ = di prf
+     where
+       prf : ∀{d}{t} → A[ φ U ψ ] d t → A[ φ U ψ ] (suc d) t
+       prf (here x)      = here  (q x)
+       prf (there x xs)  = there (p x) (All.map prf xs)
 
-  AF : Formula → Formula
-  AF φ = A[ True U φ ]
+ data E[_U_] (φ ψ : Formula) : Formula where
+   here  : ∀{t}{n} → ψ n t → E[ φ U ψ ] (suc n) t
+   there : ∀{σ}{ms}{n}
+     → φ n (At σ ms)
+     → Any (E[ φ U ψ ] n) (♭ ms)
+     → E[ φ U ψ ] (suc n) (At σ ms)
 
-  AG : Formula → Formula
-  AG φ = A[ φ U φ ∧′ Completed ]
+ instance
+    E-di : ∀{φ ψ} ⦃ p : DepthInv φ ⦄ ⦃ q : DepthInv ψ ⦄ → DepthInv E[ φ U ψ ]
+    E-di {φ}{ψ} ⦃ di p ⦄ ⦃ di q ⦄ = di prf
+      where
+        prf : ∀{d}{t} → E[ φ U ψ ] d t → E[ φ U ψ ] (suc d) t
+        prf (here x)      = here  (q x)
+        prf (there x xs)  = there (p x) (Any.map prf xs)
 
-  instance
-    A-di : ∀{φ ψ}
-         → ⦃ p : Depth-Invariant φ ⦄
-         → ⦃ q : Depth-Invariant ψ ⦄
-         → Depth-Invariant A[ φ U ψ ]
-    A-di ⦃ p ⦄ ⦃ q ⦄ (here x) = here (q x)
-    A-di ⦃ p ⦄ ⦃ q ⦄ (there x ys) = there (p x) (All.map (A-di ⦃ p ⦄ ⦃ q ⦄) ys)
+ AF EF : Formula → Formula
+ AF φ = A[ True U φ ]
+ EF φ = E[ True U φ ]
 
-  data E[_U_] (φ ψ : Formula) : Formula where
-    here  : ∀{t}{n} → ψ n t → E[ φ U ψ ] (suc n) t
-    there : ∀{σ}{ms}{n} → φ n (At σ ms) → Any (E[ φ U ψ ] n) (♭ ms) → E[ φ U ψ ] (suc n) (At σ ms)
+ data Completed : Formula where
+   completed : ∀{σ}{n}{ms}
+             → ♭ ms ≡ []
+             → Completed n (At σ ms)
+ instance
+   Completed-di : DepthInv Completed
+   Completed-di = di prf
+     where
+       prf : ∀{d}{t} → Completed d t → Completed (suc d) t
+       prf (completed p) = completed p
 
-  EF : Formula → Formula
-  EF φ = E[ True U φ ]
+ AG EG : Formula → Formula
+ AG  φ = A[  φ U φ ∧′ Completed ]
+ EG  φ = E[  φ U φ ∧′ Completed ]
 
-  EG : Formula → Formula
-  EG φ = E[ φ U φ ∧′ Completed ]
+ MC : Formula → Set
+ MC φ = (t : CT)(d : ℕ) → HDec (φ d t)
 
+ now : ∀{ g : ⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → Set }{hdec}
+     → ⦃ P : IsSearch hdec ⦄
+     → (⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → hdec (g ⦃ σ ⦄ ⦃ ℓ ⦄) )
+     → MC ⟨ g ⟩
+ now p (At (ℓ , σ) ms) _ = (| here (toHDec (p ⦃ σ ⦄ ⦃ ℓ ⦄)) |)
 
-  instance
-    E-di : ∀{φ ψ}
-         → ⦃ p : Depth-Invariant φ ⦄
-         → ⦃ q : Depth-Invariant ψ ⦄
-         → Depth-Invariant E[ φ U ψ ]
-    E-di ⦃ p ⦄ ⦃ q ⦄ (here x) = here (q x)
-    E-di ⦃ p ⦄ ⦃ q ⦄ (there x y)
-      = there (p x) (Any.map (E-di ⦃ p ⦄ ⦃ q ⦄) y)
+ completed? : MC Completed
+ completed? (At σ ms) _ = (| completed (empty? (♭ ms)) |)
+  where
+    empty? : ∀{X}(n : List X) → HDec (n ≡ [])
+    empty? []       = return refl
+    empty? (_ ∷ _)  = ∅
 
-    True-di : Depth-Invariant True
-    True-di _ = tt
+ infixr 20 _and′_
+ _and′_ : ∀ {φ ψ} → MC φ → MC ψ → MC (φ ∧′ ψ)
+ _and′_ a b m n = (| a m n , b m n |)
 
-    ∧′-di : ∀{φ ψ}
-          → ⦃ p : Depth-Invariant φ ⦄
-          → ⦃ q : Depth-Invariant ψ ⦄
-          → Depth-Invariant (φ ∧′ ψ)
-    ∧′-di ⦃ p ⦄ ⦃ q ⦄ (x , y) = p x , q y
+ a-u : ∀{φ ψ} → MC φ → MC ψ → MC A[ φ U ψ ]
+ a-u _   _   _          zero     =  ∅
+ a-u p₁  p₂  t@(At σ ms)  (suc n)  =  (| here (p₂ t n) |)
+                                   ∣  (| there (p₁ t n) rest |)
+    where rest = all (♭ ms) λ m → a-u p₁ p₂ m n
 
-  data ⟨_⟩ (p : ⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → Set) : Formula where
-    here : ∀{σ}{ℓ}{ms}{n} → p ⦃ σ ⦄ ⦃ ℓ ⦄ → ⟨ p ⟩ n (At (ℓ , σ) ms)
+ e-u : ∀{φ ψ} → MC φ → MC ψ → MC E[ φ U ψ ]
+ e-u _   _   _            zero     = ∅
+ e-u p₁  p₂  t@(At σ ms)  (suc n)  =  (| here (p₂ t n) |)
+                                   ∣  (| there (p₁ t n) rest |)
+    where rest = any (♭ ms) λ m → e-u p₁ p₂ m n
 
-  instance
-    ⟨⟩-di : ∀{p : ⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → Set }
-          → Depth-Invariant ⟨ p ⟩
-    ⟨⟩-di (here x) = here x
+ ef  : ∀{φ} → MC φ → MC (EF φ)
+ af  : ∀{φ} → MC φ → MC (AF φ)
+ eg  : ∀{φ} → MC φ → MC (EG φ)
+ ag  : ∀{φ} → MC φ → MC (AG φ)
 
-
-  di-≤ : ∀{m}{n n′} φ
-       → Depth-Invariant φ
-       → φ n m
-       → n ≤′ n′ → φ n′ m
-  di-≤ φ p q ≤′-refl = q
-  di-≤ φ p q (≤′-step l) = p (di-≤ φ p q l)
-
-  di-⊧ : ∀{n}{φ}{m} → ⦃ p : Depth-Invariant φ ⦄ → φ n m → m ⊧ φ
-  di-⊧ {n}{φ} ⦃ d ⦄ p = models n (λ q → di-≤ φ d p q)
-
-  a-u : ∀{φ ψ : Formula}
-      → ( (m : CT)(n : ℕ) → Property (φ n m) )
-      → ( (m : CT)(n : ℕ) → Property (ψ n m) )
-      → (m : CT)(n : ℕ)
-      → Property (A[ φ U ψ ] n m)
-  a-u _ _ _ zero = ∅
-  a-u p₁ p₂ (At σ ms) (suc n) = here <$> p₂ (At σ ms) n
-                              ∣ there <$> p₁ (At σ ms) n ⊛ all (♭ ms) (λ m → a-u p₁ p₂ m n)
-
-
-  af : ∀{φ : Formula}
-     → ( (m : CT)(n : ℕ) → Property (φ n m) )
-     → (m : CT)(n : ℕ)
-     → Property (AF φ n m)
-  af p m n = a-u (λ _ _ → return tt) p m n
-
-
-
-
-
-  and′ : ∀ {φ ψ  : Formula}
-       → ( (m : CT)(n : ℕ) → Property (φ n m) )
-       → ( (m : CT)(n : ℕ) → Property (ψ n m) )
-       → (m : CT)(n : ℕ)
-       → Property ((φ ∧′ ψ) n m)
-  and′ a b m n = _,_ <$> a m n ⊛ b m n
-
-  completed? : ∀ m n → Property (Completed n m)
-  completed? (At σ ms) _ = completed <$> empty? (♭ ms)
-    where
-      empty? : ∀{X}(n : List X) → Property (n ≡ [])
-      empty? []      = return refl
-      empty? (_ ∷ _) = ∅
-
-  ag : ∀{φ : Formula}
-     → ( (m : CT)(n : ℕ) → Property (φ n m) )
-     → (m : CT)(n : ℕ)
-     → Property (AG φ n m)
-  ag p = a-u p (and′ p completed?)
-
-  e-u : ∀{φ ψ : Formula}
-      → ( (m : CT)(n : ℕ) → Property (φ n m) )
-      → ( (m : CT)(n : ℕ) → Property (ψ n m) )
-      → (m : CT)(n : ℕ)
-      → Property (E[ φ U ψ ] n m)
-  e-u _ _ _ zero = ∅
-  e-u p₁ p₂ (At σ ms) (suc n) = here <$> p₂ (At σ ms) n
-                              ∣ there <$> p₁ (At σ ms) n ⊛ any (♭ ms) (λ m → e-u p₁ p₂ m n)
-
-  ef : ∀{φ : Formula}
-     → ( (m : CT)(n : ℕ) → Property (φ n m) )
-     → (m : CT)(n : ℕ)
-     → Property (EF φ n m)
-  ef p m n = e-u (λ _ _ → return tt) p m n
-
-  eg : ∀{φ : Formula}
-     → ( (m : CT)(n : ℕ) → Property (φ n m) )
-     → (m : CT)(n : ℕ)
-     → Property (EG φ n m)
-  eg p = e-u p (and′ p completed?)
-
-  now : ∀{ p : ⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → Set }{prop}
-      → ⦃ pr : IsProp prop ⦄
-      → (⦃ σ : Σ ⦄ → ⦃ ℓ : L ⦄ → prop (p ⦃ σ ⦄ ⦃ ℓ ⦄) )
-      → (m : CT)(n : ℕ)
-      → Property (⟨ p ⟩ n m)
-  now p₁ (At (ℓ , σ) ms) _ = here <$> conversion (p₁ ⦃ σ ⦄ ⦃ ℓ ⦄)
+ ef p  = e-u  (λ _ _ → return tt) p
+ af p  = a-u  (λ _ _ → return tt) p
+ eg p  = e-u  p (p and′ completed?)
+ ag p  = a-u  p (p and′ completed?)
+    

@@ -6,9 +6,10 @@ open import Data.List as L hiding (and; map)
 open import Function
 open import Relation.Binary.PropositionalEquality hiding ([_])
 open import Data.Unit using (tt)
+open import Relation.Nullary
+open import Data.Product hiding (Σ)
 
-open import Pair hiding (map)
-open import Properties 
+open import HDec
 open import ModelChecker
 
 data Guard : Set
@@ -33,7 +34,8 @@ ops (skip · y , σ) = [ y , σ ]
 ops (x · y    , σ) = L.map (λ { (x , σ) → (x · y) , σ}) $ ops (x , σ)
 ops (if xs fi , σ) = L.map (λ { (g ⟶ x) → x , σ }) $
                      filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs
-ops (do xs od , σ) with L.map (λ { (g ⟶ x) → (x · do xs od) , σ}) (filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs)
+ops (do xs od , σ) with L.map (λ { (g ⟶ x) → (x · do xs od) , σ}) $
+                        filter (λ { (g ⟶ x) → g ⦃ σ ⦄ }) xs
 ... | [] = [ skip , σ ]
 ... | ys = ys
 
@@ -52,9 +54,9 @@ if′ g then x else y =
     ∷  []
     fi
 skip? : (ℓ : GCL) → Dec (ℓ ≡ skip)
-skip? if x fi = no (λ () )
-skip? (σ · σ₁) = no (λ () )
-skip? do x od = no (λ () )
+skip? if x fi    = no (λ () )
+skip? (σ · σ₁)   = no (λ () )
+skip? do x od    = no (λ () )
 skip? (update x) = no (λ () )
-skip? skip = yes refl
+skip? skip       = yes refl
 

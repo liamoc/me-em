@@ -13,15 +13,7 @@ open import Function
 
 
 
-Gen = Stream
-  where open S
-
-{- 
-  -- Data.Stream
-
-  data Stream (A : Set) : Set where
-    _∷_ : (x : A) (xs : ∞ (Stream A)) → Stream A
--}
+Gen = S.Stream
 
 instance nats₀ = S.iterate suc 0
 
